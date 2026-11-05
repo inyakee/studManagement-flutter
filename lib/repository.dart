@@ -36,10 +36,11 @@ class SupabaseStudentRepository implements StudentRepository {
       await client.rpc('student_app_has_access') == true;
   @override
   Future<StudentPage> fetch({String search = '', int page = 0}) async {
-    if (!await hasAccess())
+    if (!await hasAccess()) {
       throw const AppFailure(
         'Your account is not approved. Ask the project owner for access.',
       );
+    }
     final data = await client.rpc(
       'student_app_search',
       params: {
@@ -67,26 +68,30 @@ class SupabaseStudentRepository implements StudentRepository {
           .from('students')
           .update(draft.toJson())
           .eq('id', original.id);
-      if (original.updatedAt != null)
+      if (original.updatedAt != null) {
         query = query.eq('updated_at', original.updatedAt!);
+      }
       final result = await query.select('id');
-      if (result.isEmpty)
+      if (result.isEmpty) {
         throw const AppFailure(
           'This record changed or is no longer available. Refresh the list and try again.',
         );
+      }
     }
   }
 
   @override
   Future<void> delete(Student student) async {
     var query = client.from('students').delete().eq('id', student.id);
-    if (student.updatedAt != null)
+    if (student.updatedAt != null) {
       query = query.eq('updated_at', student.updatedAt!);
+    }
     final result = await query.select('id');
-    if (result.isEmpty)
+    if (result.isEmpty) {
       throw const AppFailure(
         'This record changed or is no longer available. Refresh before deleting.',
       );
+    }
   }
 }
 
@@ -98,12 +103,15 @@ class AppFailure implements Exception {
 String friendlyError(Object error) {
   if (error is AppFailure) return error.message;
   if (error is AuthException) {
-    if (error.code == 'invalid_credentials')
+    if (error.code == 'invalid_credentials') {
       return 'The email or password is incorrect.';
-    if (error.code == 'email_not_confirmed')
+    }
+    if (error.code == 'email_not_confirmed') {
       return 'Your email is not confirmed. Ask the project owner to check your account.';
-    if (error.statusCode == '429')
+    }
+    if (error.statusCode == '429') {
       return 'Too many attempts. Wait a moment before trying again.';
+    }
     return 'Sign-in failed. Check your connection and account details.';
   }
   if (error is PostgrestException) {
@@ -112,14 +120,18 @@ String friendlyError(Object error) {
           ? 'That student number is already in use.'
           : 'That email address is already in use.';
     }
-    if (error.code == '42501')
+    if (error.code == '42501') {
       return 'You do not have permission to change student records.';
-    if (error.code == '23514' || error.code == '23502')
+    }
+    if (error.code == '23514' || error.code == '23502') {
       return 'Check all required fields. Year level must be from 1 to 6.';
-    if (error.code == 'PGRST202' || error.code == '42P01')
+    }
+    if (error.code == 'PGRST202' || error.code == '42P01') {
       return 'The database setup is incomplete. Ask the project owner to run the Flutter database migration.';
-    if (error.code == 'PGRST301' || error.code == 'PGRST303')
+    }
+    if (error.code == 'PGRST301' || error.code == 'PGRST303') {
       return 'Your session expired. Sign out and sign in again.';
+    }
   }
   return 'We could not connect. Check your internet connection and try again.';
 }

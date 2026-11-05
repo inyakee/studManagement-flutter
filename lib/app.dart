@@ -251,10 +251,12 @@ class _AccessGateState extends State<AccessGate> {
   Widget build(BuildContext context) => FutureBuilder<bool>(
     future: _access,
     builder: (context, result) {
-      if (result.connectionState != ConnectionState.done)
+      if (result.connectionState != ConnectionState.done) {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
-      if (result.data == true)
+      }
+      if (result.data == true) {
         return StudentHome(repository: widget.repository);
+      }
       return Scaffold(
         appBar: AppBar(title: const Text('Account access')),
         body: Center(
@@ -284,8 +286,9 @@ class _AccessGateState extends State<AccessGate> {
                     try {
                       await widget.repository.signOut();
                     } catch (e) {
-                      if (context.mounted)
+                      if (context.mounted) {
                         showMessage(context, friendlyError(e));
+                      }
                     }
                   },
                   child: const Text('Sign out'),
@@ -339,8 +342,9 @@ class _StudentHomeState extends State<StudentHome> {
       );
       if (mounted && request == _request) setState(() => _data = data);
     } catch (e) {
-      if (mounted && request == _request)
+      if (mounted && request == _request) {
         setState(() => _error = friendlyError(e));
+      }
     } finally {
       if (mounted && request == _request) setState(() => _loading = false);
     }
@@ -413,8 +417,9 @@ class _StudentHomeState extends State<StudentHome> {
                         try {
                           await widget.repository.signOut();
                         } catch (e) {
-                          if (context.mounted)
+                          if (context.mounted) {
                             showMessage(context, friendlyError(e));
+                          }
                         }
                       },
                       child: const Text('Sign out'),
@@ -911,8 +916,9 @@ class _StudentDetailsState extends State<StudentDetails> {
                             ),
                           ),
                         );
-                        if (saved == true && context.mounted)
+                        if (saved == true && context.mounted) {
                           Navigator.pop(context, true);
+                        }
                       },
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Edit student'),

@@ -8,7 +8,10 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   const url = String.fromEnvironment('SUPABASE_URL');
   const key = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
-  if (url.isEmpty || !key.startsWith('sb_publishable_')) {
+  if (url.contains('YOUR_') ||
+      key.contains('YOUR_') ||
+      url.isEmpty ||
+      !key.startsWith('sb_publishable_')) {
     runApp(
       const MaterialApp(
         home: Scaffold(
@@ -28,7 +31,7 @@ Future<void> main() async {
   try {
     await Supabase.initialize(
       url: url,
-      anonKey: key,
+      publishableKey: key,
       authOptions: const FlutterAuthClientOptions(
         authFlowType: AuthFlowType.pkce,
       ),

@@ -43,8 +43,9 @@ class MemoryRepository implements StudentRepository {
       );
   @override
   Future<void> save(StudentDraft draft, {Student? original}) async {
-    if (records.any((s) => s.number == draft.number && s.id != original?.id))
+    if (records.any((s) => s.number == draft.number && s.id != original?.id)) {
       throw const AppFailure('That student number is already in use.');
+    }
     records.removeWhere((s) => s.id == original?.id);
     records.add(
       Student(
