@@ -13,3 +13,7 @@ Check that students can open private port 8080, create a record in Flutter, comp
 Tests use an in-memory repository and do not prove live persistence. Grade live database evidence separately. Ask for both repository links, matching record screenshots, passing checks, and a brief explanation of each main file.
 
 If a policy or function already exists, inspect migration history. Do not use migrate:fresh to repair the database. Read VERIFICATION.md for actual instructor results. Account limits, network issues, and configuration differences can still cause errors even when students follow the guide.
+
+## Owner database check
+
+The Laravel companion includes `scripts/verify-flutter-demo.php`. After applying the approved migration, run `php scripts/verify-flutter-demo.php` in the Laravel Codespace. It performs 13 permission, validation, and CRUD checks inside a transaction, then rolls back its changes. It does not replace checking the live Flutter forms and comparing records in Laravel and Supabase.
