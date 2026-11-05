@@ -1,0 +1,10 @@
+{
+  "name": "Student Pocket - Flutter web",
+  "build": { "dockerfile": "Dockerfile" },
+  "remoteUser": "vscode",
+  "forwardPorts": [8080],
+  "portsAttributes": { "8080": { "label": "Student Pocket", "onAutoForward": "notify", "protocol": "http" } },
+  "postCreateCommand": "bash scripts/setup.sh",
+  "postStartCommand": "bash scripts/start.sh",
+  "customizations": { "vscode": { "extensions": ["Dart-Code.dart-code", "Dart-Code.flutter"] } }
+}
