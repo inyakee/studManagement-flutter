@@ -4,7 +4,7 @@ Build a mobile-style app that runs in your browser, using GitHub Codespaces.
 
 ## What you will make
 
-Your Flutter app will sign in, show student records, search, add, edit, and delete. It will use the same Supabase database as your Laravel website.
+Your Flutter app will open without login, show student records, search, add, edit, and delete. It will use the same Supabase database as your Laravel website.
 
 ```text
 Flutter app  <---->  Supabase database  <---->  Laravel website
@@ -41,7 +41,7 @@ Keep Laravel's original migrations. The Flutter access migration below adds secu
 In your Laravel repository, create:
 
 ```text
-database/migrations/2026_11_05_000001_enable_flutter_staff_access.php
+database/migrations/2026_11_05_000001_enable_flutter_demo_access.php
 ```
 
 Copy its complete contents from `CODE_REFERENCE.md`, then save it. If your teacher already added this migration to your repository, use that existing file rather than making another copy with a different name.
@@ -56,43 +56,13 @@ php artisan config:clear
 php artisan migrate
 ```
 
-**What this does:** it creates a list of approved app accounts, adds student access rules, checks values in the database, fills in timestamps, and provides a safe search function. Laravel's existing server connection continues to work.
+**What this does:** it allows the no-login app to read, add, edit, and delete student records. It also checks fields, fills timestamps, and provides search. Laravel continues using its server connection.
 
-Only approved accounts can manage the shared directory. Being able to sign in does not automatically give an account access. Visitors who have not signed in cannot read student records. Approved accounts share the same directory; records are not separated by person.
+**Fictional classroom data only:** anyone with the public app settings can read or change these records through the Supabase API. A private Codespaces port does not protect that API. Use an isolated practice project. In a shared project, get the owner's approval before running this migration. No Auth account or membership table is needed.
 
-Checkpoint: the new migration runs successfully. In Supabase Table Editor you can see `student_app_members` alongside `students`.
+Checkpoint: the migration finishes successfully. Run it once. If policies or functions already exist, ask your teacher to inspect migration history. Do not reset or drop the students table.
 
-Do not run both a copied SQL setup and this migration. Use this migration once. If you see a message that a policy or table already exists, stop and ask your teacher to check which setup was already applied. Do not drop the students table.
-
-## 3. Create your app sign-in account
-
-In Supabase, open your project and choose **Authentication → Users**. Open **Add user → Create new user**.
-
-Enter a test email address that you control and choose a password. For this classroom activity, leave **Auto confirm user** checked, then create the user. This dashboard option creates a confirmed test account without sending a confirmation email.
-
-**What this does:** it creates a Supabase Auth account for your Flutter app. It is separate from your Supabase dashboard account and from the PostgreSQL database password used by Laravel.
-
-Keep your password private. You will enter it into the app's sign-in form. Do not place it in source code or a configuration file.
-
-Copy the new user's **UID**. This is a long identifier, not their email.
-
-## 4. Approve the account
-
-As the project owner, open Supabase **Table Editor → public → student_app_members**. Insert a row:
-
-| Column | Value |
-|---|---|
-| `user_id` | The Auth user's UID from Step 3 |
-| `enabled` | `true` |
-| `created_at` | Leave its default value |
-
-Save the row. If you are working in a shared class project, your teacher performs this step instead.
-
-**What this does:** it gives that account permission to use the directory. App users cannot add themselves to the approved list. Setting `enabled` to `false` blocks that account's database access again.
-
-Checkpoint: the Auth UID and membership `user_id` match exactly. An email address will not work in this column.
-
-## 5. Create a separate Flutter repository
+## 3. Create a separate Flutter repository
 
 On GitHub, create a new private repository named `studManagement-flutter` and add a README.
 
@@ -101,11 +71,11 @@ Your two repositories now have different jobs:
 | Repository | Job |
 |---|---|
 | `studManagement` | Laravel website, database migrations, and server-side connection |
-| `studManagement-flutter` | Flutter screens, sign-in, and direct Supabase requests |
+| `studManagement-flutter` | Flutter screens and direct Supabase requests |
 
 Open **Code → Codespaces → Create codespace on main** in the Flutter repository.
 
-## 6. Prepare Flutter in Codespaces
+## 4. Prepare Flutter in Codespaces
 
 Create `.devcontainer/Dockerfile` using the Dockerfile in the code reference. For the first build, create `.devcontainer/devcontainer.json` with this shorter configuration:
 
@@ -137,7 +107,7 @@ flutter --version
 
 The supplied container uses Flutter **3.47.2**. Use that version for this exercise so the code and packages match.
 
-## 7. Create the Flutter project
+## 5. Create the Flutter project
 
 Make sure your terminal is in the new Flutter repository:
 
@@ -157,11 +127,11 @@ Add the Supabase package:
 flutter pub add supabase_flutter:2.18.3
 ```
 
-**What this does:** Flutter creates the standard project files, and the package lets the app sign in and send requests to Supabase.
+**What this does:** Flutter creates the standard project files, and the package lets the app send requests to Supabase.
 
 Checkpoint: you can see `pubspec.yaml`, `lib/main.dart`, `test`, and `web` in the file panel.
 
-## 8. Add the application code
+## 6. Add the application code
 
 Use the complete files in `CODE_REFERENCE.md`. Create the folders and files shown there. When a file already exists, replace its contents with the supplied version. Copy the code inside each block, without the backticks.
 
@@ -169,8 +139,8 @@ Use the complete files in `CODE_REFERENCE.md`. Create the folders and files show
 |---|---|
 | `lib/main.dart` | Reads the public configuration, starts Supabase, and opens the app. |
 | `lib/student.dart` | Describes a student record and checks the form values. |
-| `lib/repository.dart` | Handles sign-in, permissions, and Supabase CRUD requests. |
-| `lib/app.dart` | Contains the phone-style frame, sign-in screen, student list, forms, and profile screen. |
+| `lib/repository.dart` | Sends search, list, add, edit, and delete requests to Supabase. |
+| `lib/app.dart` | Contains the phone-style frame, student list, forms, and profile screen. |
 | `config/app.example.json` | Shows which public settings the app needs. |
 | `scripts/setup.sh` | Installs packages and prepares a first build. |
 | `scripts/start.sh` | Builds the app when needed and serves it on port 8080. |
@@ -185,7 +155,7 @@ Delete Flutter's original counter test, `test/widget_test.dart`, after adding th
 
 Save every file. Do not copy the Flutter code into the Laravel repository.
 
-## 9. Add your public Supabase settings
+## 7. Add your public Supabase settings
 
 In Supabase, open **Project Settings → API Keys**. Copy the **publishable key**, which starts with `sb_publishable_`. Copy your project URL from the project overview or Connect panel.
 
@@ -206,11 +176,11 @@ Edit `config/app.json`:
 
 Replace both example values with your own project details. Keep the quotation marks and comma. Save the file.
 
-**Why this key is allowed in Flutter:** a publishable key identifies the Supabase project. The user's sign-in and the database access rules decide what the user may do. The key does not replace those rules.
+**Why this key is allowed in Flutter:** a publishable key identifies the Supabase project. Database access rules decide what requests are allowed. This demo deliberately permits anonymous student CRUD. The key does not replace those rules.
 
 Never use `sb_secret_`, a service-role key, a database password, or your sign-in password here. Browser builds contain their configuration and can be inspected. The configuration file is ignored by Git for classroom convenience; it is not a way to hide secrets in a web app.
 
-## 10. Build and open the app
+## 8. Build and open the app
 
 Run:
 
@@ -228,9 +198,9 @@ https://YOUR-FLUTTER-CODESPACE-8080.app.github.dev
 
 This is different from Laravel's port 8000 address. Do not use the teacher's Codespace name, and do not type `localhost:8080` in your computer's browser.
 
-Checkpoint: the sign-in screen appears inside a phone-style frame on a wide screen. On a narrow screen it fills the available width. Sign in using the app account from Step 3.
+Checkpoint: the student list opens directly inside a phone-style frame. On a narrow screen it fills the available width. There is no login screen.
 
-## 11. Test Flutter and Laravel together
+## 9. Test Flutter and Laravel together
 
 Create this invented student in Flutter:
 
@@ -252,14 +222,13 @@ Next, test these actions:
 3. Search in Flutter by name, number, email, and course. Try an unmatched search, then clear it.
 4. Try blank fields, an invalid email, and duplicate student numbers or emails. The app should show a useful message.
 5. Add a second disposable student. Open Delete, choose Cancel, and verify it remains. Then delete it deliberately and confirm its removal in both apps.
-6. Sign out and refresh the Flutter page. Student records should not appear before sign-in.
-7. With a separate unapproved Auth account, check that sign-in does not grant directory access. The project owner can create that second test account; do not share your password with a classmate to perform this check.
+6. Refresh the app and confirm the list opens without requesting an account.
 
 **What this proves:** both applications save to the same database, and permission checks happen in Supabase. Flutter's form checks improve the experience, while database checks still protect direct requests.
 
 If you edit an old version of a record that someone else has changed, the app asks you to refresh. This prevents silently overwriting newer changes.
 
-## 12. Run tests and save your work
+## 10. Run tests and save your work
 
 Run these commands from the Flutter project folder:
 
@@ -277,7 +246,7 @@ bash scripts/rebuild.sh
 
 Refresh the browser after rebuilding. A release build does not automatically pick up source or configuration changes before you rebuild it.
 
-The supplied tests use an in-memory repository and should all pass. They do not sign in to Supabase or prove the live access rules are correct. The live comparisons and account checks in Step 11 are separate.
+The supplied tests use an in-memory repository and should all pass. They do not contact Supabase or prove live database access. Complete the live comparisons in Step 9 separately.
 
 Check your files before committing:
 
@@ -305,7 +274,7 @@ git push
 
 Also commit the migration in your Laravel repository. On GitHub, check **Actions** in each repository. A green check means that workflow passed; still show your teacher the live Supabase record.
 
-## 13. Return to your work later
+## 11. Return to your work later
 
 Stop the Codespace from GitHub's Codespaces list when you finish. Your database records stay in Supabase.
 
@@ -323,14 +292,11 @@ Use `bash scripts/rebuild.sh` after changing code or `config/app.json`, then ref
 | “Add your Supabase URL…” screen | Replace both placeholders in `config/app.json`, save, and rebuild. |
 | JSON configuration error | Use straight double quotation marks, the comma between the two settings, and no trailing comma. |
 | Invalid API key or connection fails | Use the publishable key and URL from the same project. Check whether the Supabase project is paused. Rebuild after correcting the configuration. |
-| Incorrect email or password | Use the Supabase Auth app account, not the dashboard login or Laravel database password. Ask the owner to help if you forgot it. |
-| Email is not confirmed | Ask the project owner to confirm the classroom Auth account. Do not turn off other security settings as a shortcut. |
-| Account is not approved | Add the Auth user's exact UID to `student_app_members` with `enabled=true`, using the owner dashboard. Then choose Check again. |
 | Incomplete database setup or missing function | Run the supplied new migration in the Laravel Codespace connected to the correct Supabase project. |
-| RLS or permission denied | Check membership and policies. Do not disable RLS or add an allow-everyone policy. |
+| RLS or permission denied | Ask the owner whether the demo migration was approved and applied. Keep RLS enabled and use the supplied scoped demo policies. |
 | Laravel table is missing | Complete the earlier Laravel activity and run its migrations before the Flutter migration. |
-| A policy or membership table already exists | The setup may have been run through another route. Ask the teacher to check migration history; do not reset the database. |
-| Nothing appears in the list | Check that you are an approved account, clear search, refresh, and check the Supabase project. |
+| A policy or function already exists | The setup may have been run through another route. Ask the teacher to check migration history; do not reset the database. |
+| Nothing appears in the list | Clear search, refresh, and check the Supabase project and demo access setup. |
 | Duplicate record message | Use another student number or email. Existing uniqueness rules are shared by both apps. |
 | Saved in one app but not visible in the other | Refresh both lists, clear search filters, and check that both apps use the same Supabase project. |
 | Record changed or no longer available | Someone edited or deleted the version you opened. Return to the list, refresh, then reopen it. |
@@ -353,7 +319,7 @@ If you still need help, send the teacher the step number, the exact error, and w
 - A screenshot of the phone-style Flutter app.
 - A screenshot of the same practice record in Laravel and Supabase.
 - Passing test results.
-- A short demonstration of sign-in, add, view, edit, search, delete, and sign-out.
+- A short demonstration of add, view, edit, search, and delete without login.
 - One or two sentences explaining what each main file does.
 
 Keep ports private. A private Codespaces link is not automatically accessible to your teacher's account; arrange a demonstration or recording if needed.

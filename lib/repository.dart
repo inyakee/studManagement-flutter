@@ -3,11 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'student.dart';
 
 abstract class StudentRepository {
-  String? get accountEmail;
-  Stream<void> get authChanges;
-  Future<void> signIn(String email, String password);
-  Future<void> signOut();
-  Future<bool> hasAccess();
   Future<StudentPage> fetch({String search = '', int page = 0});
   Future<void> save(StudentDraft draft, {Student? original});
   Future<void> delete(Student student);
@@ -18,29 +13,7 @@ class SupabaseStudentRepository implements StudentRepository {
   final SupabaseClient client;
   static const pageSize = 20;
   @override
-  String? get accountEmail => client.auth.currentUser?.email;
-  @override
-  Stream<void> get authChanges => client.auth.onAuthStateChange.map((_) {});
-  @override
-  Future<void> signIn(String email, String password) async {
-    await client.auth.signInWithPassword(
-      email: email.trim(),
-      password: password,
-    );
-  }
-
-  @override
-  Future<void> signOut() => client.auth.signOut(scope: SignOutScope.local);
-  @override
-  Future<bool> hasAccess() async =>
-      await client.rpc('student_app_has_access') == true;
-  @override
   Future<StudentPage> fetch({String search = '', int page = 0}) async {
-    if (!await hasAccess()) {
-      throw const AppFailure(
-        'Your account is not approved. Ask the project owner for access.',
-      );
-    }
     final data = await client.rpc(
       'student_app_search',
       params: {
@@ -102,18 +75,6 @@ class AppFailure implements Exception {
 
 String friendlyError(Object error) {
   if (error is AppFailure) return error.message;
-  if (error is AuthException) {
-    if (error.code == 'invalid_credentials') {
-      return 'The email or password is incorrect.';
-    }
-    if (error.code == 'email_not_confirmed') {
-      return 'Your email is not confirmed. Ask the project owner to check your account.';
-    }
-    if (error.statusCode == '429') {
-      return 'Too many attempts. Wait a moment before trying again.';
-    }
-    return 'Sign-in failed. Check your connection and account details.';
-  }
   if (error is PostgrestException) {
     if (error.code == '23505') {
       return error.message.contains('student_number')
@@ -121,7 +82,7 @@ String friendlyError(Object error) {
           : 'That email address is already in use.';
     }
     if (error.code == '42501') {
-      return 'You do not have permission to change student records.';
+      return 'Demo database access is not enabled. Ask the project owner to check the classroom access rules.';
     }
     if (error.code == '23514' || error.code == '23502') {
       return 'Check all required fields. Year level must be from 1 to 6.';
@@ -130,7 +91,7 @@ String friendlyError(Object error) {
       return 'The database setup is incomplete. Ask the project owner to run the Flutter database migration.';
     }
     if (error.code == 'PGRST301' || error.code == 'PGRST303') {
-      return 'Your session expired. Sign out and sign in again.';
+      return 'Check the Supabase project URL and publishable key, then rebuild the app.';
     }
   }
   return 'We could not connect. Check your internet connection and try again.';

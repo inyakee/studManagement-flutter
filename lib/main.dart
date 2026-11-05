@@ -33,7 +33,9 @@ Future<void> main() async {
       url: url,
       publishableKey: key,
       authOptions: const FlutterAuthClientOptions(
-        authFlowType: AuthFlowType.pkce,
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUri: false,
       ),
     );
     runApp(

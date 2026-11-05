@@ -1,10 +1,8 @@
-# Flutter Student App — Complete Code Reference
+# Complete code reference
 
-Follow STUDENT_GUIDE.md. Each heading is an exact file path. Create missing folders and replace the file contents with the code shown. Copy inside the fences only. The first migration belongs in the Laravel repository; the remaining app files belong in the Flutter repository.
+Follow STUDENT_GUIDE.md. Copy inside the code fences. The first file belongs in Laravel; all remaining files belong in Flutter. Use the short initial devcontainer configuration from the guide until scripts exist. Standard web files are created by flutter create.
 
-Use the short devcontainer.json from the guide for the initial empty repository. Use the full version below after the scripts exist. Standard web scaffold files are created by flutter create. The reference ZIP includes the tested pubspec.lock.
-
-## Laravel repository: database/migrations/2026_11_05_000001_enable_flutter_staff_access.php
+## Laravel: database/migrations/2026_11_05_000001_enable_flutter_demo_access.php
 
 ```php
 <?php
@@ -21,44 +19,25 @@ return new class extends Migration
         }
 
         DB::unprepared(<<<'SQL'
-CREATE TABLE public.student_app_members (
-    user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    enabled boolean NOT NULL DEFAULT true,
-    created_at timestamptz NOT NULL DEFAULT now()
-);
-ALTER TABLE public.student_app_members ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.student_app_members FROM anon, authenticated;
-GRANT SELECT ON public.student_app_members TO authenticated;
-CREATE POLICY student_app_member_own_status ON public.student_app_members
-    FOR SELECT TO authenticated USING ((SELECT auth.uid()) = user_id);
-
-CREATE FUNCTION public.student_app_has_access() RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
-    SELECT EXISTS (SELECT 1 FROM public.student_app_members
-      WHERE user_id = (SELECT auth.uid()) AND enabled = true);
-$$;
-REVOKE ALL ON FUNCTION public.student_app_has_access() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.student_app_has_access() TO authenticated;
-
+-- Classroom demonstration: anonymous clients can manage fictional students.
 ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.students FROM anon;
-REVOKE ALL ON public.students FROM authenticated;
-GRANT SELECT, DELETE ON public.students TO authenticated;
+REVOKE ALL ON public.students FROM anon, authenticated;
+GRANT SELECT, DELETE ON public.students TO anon;
 GRANT INSERT (student_number, first_name, last_name, email, course, year_level),
     UPDATE (student_number, first_name, last_name, email, course, year_level)
-    ON public.students TO authenticated;
-REVOKE ALL ON SEQUENCE public.students_id_seq FROM authenticated;
-GRANT USAGE, SELECT ON SEQUENCE public.students_id_seq TO authenticated;
+    ON public.students TO anon;
+REVOKE ALL ON SEQUENCE public.students_id_seq FROM anon, authenticated;
+GRANT USAGE, SELECT ON SEQUENCE public.students_id_seq TO anon;
 
-CREATE POLICY student_app_read ON public.students FOR SELECT TO authenticated
-    USING ((SELECT public.student_app_has_access()));
-CREATE POLICY student_app_insert ON public.students FOR INSERT TO authenticated
-    WITH CHECK ((SELECT public.student_app_has_access()));
-CREATE POLICY student_app_update ON public.students FOR UPDATE TO authenticated
-    USING ((SELECT public.student_app_has_access()))
-    WITH CHECK ((SELECT public.student_app_has_access()));
-CREATE POLICY student_app_delete ON public.students FOR DELETE TO authenticated
-    USING ((SELECT public.student_app_has_access()));
+CREATE POLICY student_demo_read ON public.students FOR SELECT TO anon
+    USING (true);
+CREATE POLICY student_demo_insert ON public.students FOR INSERT TO anon
+    WITH CHECK (true);
+CREATE POLICY student_demo_update ON public.students FOR UPDATE TO anon
+    USING (true)
+    WITH CHECK (true);
+CREATE POLICY student_demo_delete ON public.students FOR DELETE TO anon
+    USING (true);
 
 CREATE FUNCTION public.student_app_validate_row() RETURNS trigger
 LANGUAGE plpgsql SET search_path = '' AS $$
@@ -102,7 +81,7 @@ RETURNS SETOF public.students LANGUAGE sql STABLE SECURITY INVOKER SET search_pa
     LIMIT greatest(1, least(COALESCE(page_size, 21), 101)) OFFSET greatest(0, COALESCE(offset_rows, 0));
 $$;
 REVOKE ALL ON FUNCTION public.student_app_search(text, integer, integer) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.student_app_search(text, integer, integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.student_app_search(text, integer, integer) TO anon;
 NOTIFY pgrst, 'reload schema';
 SQL);
     }
@@ -113,110 +92,26 @@ SQL);
             return;
         }
         DB::unprepared(<<<'SQL'
-DROP POLICY IF EXISTS student_app_read ON public.students;
-DROP POLICY IF EXISTS student_app_insert ON public.students;
-DROP POLICY IF EXISTS student_app_update ON public.students;
-DROP POLICY IF EXISTS student_app_delete ON public.students;
+DROP POLICY IF EXISTS student_demo_read ON public.students;
+DROP POLICY IF EXISTS student_demo_insert ON public.students;
+DROP POLICY IF EXISTS student_demo_update ON public.students;
+DROP POLICY IF EXISTS student_demo_delete ON public.students;
 DROP TRIGGER IF EXISTS student_app_validate_before_write ON public.students;
 DROP FUNCTION IF EXISTS public.student_app_search(text, integer, integer);
 DROP FUNCTION IF EXISTS public.student_app_validate_row();
-DROP FUNCTION IF EXISTS public.student_app_has_access();
-DROP TABLE IF EXISTS public.student_app_members;
-REVOKE SELECT, INSERT, UPDATE, DELETE ON public.students FROM authenticated;
-REVOKE USAGE, SELECT ON SEQUENCE public.students_id_seq FROM authenticated;
+REVOKE ALL ON public.students FROM anon;
+REVOKE INSERT (student_number, first_name, last_name, email, course, year_level), UPDATE (student_number, first_name, last_name, email, course, year_level) ON public.students FROM anon;
+REVOKE USAGE, SELECT ON SEQUENCE public.students_id_seq FROM anon, authenticated;
 NOTIFY pgrst, 'reload schema';
 SQL);
     }
 };
+
 ```
 
-## Laravel repository: scripts/verify-flutter-access.php
+## Flutter: .devcontainer/Dockerfile
 
-```php
-<?php
-
-require __DIR__.'/../vendor/autoload.php';
-$app = require __DIR__.'/../bootstrap/app.php';
-$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
-$db = Illuminate\Support\Facades\DB::connection();
-if ($db->getDriverName() !== 'pgsql') {
-    throw new RuntimeException('This check requires the Supabase PostgreSQL connection.');
-}
-$checks = 0;
-$assert = function (bool $ok, string $label) use (&$checks): void {
-    if (!$ok) {
-        throw new RuntimeException('FAILED: '.$label);
-    }
-    $checks++;
-    echo 'PASS: '.$label.PHP_EOL;
-};
-$denied = function (string $sql, array $bindings, string $code) use ($db): bool {
-    $db->statement('SAVEPOINT permission_check');
-    try {
-        $db->select($sql, $bindings);
-        $db->statement('ROLLBACK TO SAVEPOINT permission_check');
-        return false;
-    } catch (Illuminate\Database\QueryException $error) {
-        $db->statement('ROLLBACK TO SAVEPOINT permission_check');
-        return (string) $error->getCode() === $code;
-    } finally {
-        $db->statement('RELEASE SAVEPOINT permission_check');
-    }
-};
-
-$db->beginTransaction();
-try {
-    $id = $db->selectOne('SELECT gen_random_uuid()::text AS id')->id;
-    $suffix = str_replace('-', '', $id);
-    $number = 'VERIFY-'.substr($suffix, 0, 12);
-    // Transaction-only identity for permission checks; never a usable login.
-    $db->insert('INSERT INTO auth.users (id, email) VALUES (?::uuid, ?)', [$id, 'verify-'.$suffix.'@example.test']);
-    $db->statement('SET LOCAL ROLE anon');
-    $assert($denied('SELECT id FROM public.students LIMIT 1', [], '42501'), 'Anonymous student reads blocked');
-    $assert($denied('SELECT public.student_app_has_access()', [], '42501'), 'Anonymous membership lookup blocked');
-    $db->statement('RESET ROLE');
-    $db->select("SELECT set_config('request.jwt.claims', ?, true)", [json_encode(['sub' => $id, 'role' => 'authenticated'])]);
-    $db->statement('SET LOCAL ROLE authenticated');
-    $assert(!$db->selectOne('SELECT public.student_app_has_access() AS allowed')->allowed, 'Unapproved identity has no access');
-    $assert((int) $db->selectOne('SELECT count(*) AS count FROM public.students')->count === 0, 'Unapproved identity cannot see existing students');
-    $assert($denied('INSERT INTO public.student_app_members (user_id) VALUES (?::uuid) RETURNING user_id', [$id], '42501'), 'Accounts cannot approve themselves');
-    $insert = 'INSERT INTO public.students (student_number, first_name, last_name, email, course, year_level) VALUES (?, ?, ?, ?, ?, ?) RETURNING id';
-    $values = [$number, 'Disposable', 'Verification', $number.'@example.test', 'Information Technology', 2];
-    $assert($denied($insert, $values, '42501'), 'Unapproved student inserts blocked');
-    $db->statement('RESET ROLE');
-    $db->insert('INSERT INTO public.student_app_members (user_id) VALUES (?::uuid)', [$id]);
-    $db->statement('SET LOCAL ROLE authenticated');
-    $assert((bool) $db->selectOne('SELECT public.student_app_has_access() AS allowed')->allowed, 'Approved identity has access');
-    $assert(!$db->selectOne("SELECT has_table_privilege('authenticated', 'public.students', 'TRUNCATE') AS allowed")->allowed, 'Authenticated role cannot truncate the table');
-    $row = $db->selectOne($insert, $values);
-    $studentId = $row->id;
-    $saved = $db->selectOne('SELECT * FROM public.students WHERE id = ?', [$studentId]);
-    $assert($saved->student_number === $number && $saved->created_at !== null && $saved->updated_at !== null, 'Approved insert and timestamp defaults work');
-    $assert(count($db->select('SELECT * FROM public.student_app_search(?, 0, 21)', [$number])) === 1, 'RLS-protected search finds the record');
-    $bad = $values; $bad[0] .= 'B'; $bad[3] = 'invalid';
-    $assert($denied($insert, $bad, '23514'), 'Database rejects invalid email');
-    $bad = $values; $bad[0] .= 'C'; $bad[3] = 'other-'.$number.'@example.test'; $bad[5] = 7;
-    $assert($denied($insert, $bad, '23514'), 'Database rejects invalid year');
-    $assert($denied($insert, $values, '23505'), 'Database rejects duplicate student number');
-    $db->update('UPDATE public.students SET course = ? WHERE id = ?', ['Computer Science', $studentId]);
-    $assert($db->selectOne('SELECT course FROM public.students WHERE id = ?', [$studentId])->course === 'Computer Science', 'Approved update works');
-    $assert($denied('UPDATE public.students SET id = id + 1000000 WHERE id = ? RETURNING id', [$studentId], '42501'), 'Clients cannot change record IDs');
-    $db->delete('DELETE FROM public.students WHERE id = ?', [$studentId]);
-    $assert((int) $db->selectOne('SELECT count(*) AS count FROM public.students WHERE id = ?', [$studentId])->count === 0, 'Approved delete works');
-    $db->statement('RESET ROLE');
-    $db->update('UPDATE public.student_app_members SET enabled = false WHERE user_id = ?::uuid', [$id]);
-    $db->statement('SET LOCAL ROLE authenticated');
-    $assert(!$db->selectOne('SELECT public.student_app_has_access() AS allowed')->allowed, 'Disabled membership immediately blocks access');
-    $db->statement('RESET ROLE');
-    echo $checks.' live access checks passed. All fixtures rolled back.'.PHP_EOL;
-} finally {
-    $db->rollBack();
-}
 ```
-
-## Flutter repository: .devcontainer/Dockerfile
-
-```text
 FROM mcr.microsoft.com/devcontainers/base:bookworm
 ARG FLUTTER_VERSION=3.47.2
 USER root
@@ -227,9 +122,10 @@ RUN git clone --depth 1 --branch ${FLUTTER_VERSION} https://github.com/flutter/f
 ENV PATH="/opt/flutter/bin:${PATH}"
 USER vscode
 RUN flutter config --enable-web --no-analytics && flutter precache --web
+
 ```
 
-## Flutter repository: .devcontainer/devcontainer.json
+## Flutter: .devcontainer/devcontainer.json
 
 ```json
 {
@@ -242,70 +138,10 @@ RUN flutter config --enable-web --no-analytics && flutter precache --web
   "postStartCommand": "bash scripts/start.sh",
   "customizations": { "vscode": { "extensions": ["Dart-Code.dart-code", "Dart-Code.flutter"] } }
 }
+
 ```
 
-## Flutter repository: .gitattributes
-
-```text
-* text=auto eol=lf
-```
-
-## Flutter repository: .gitignore
-
-```text
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-/config/app.json
-/.logs/
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-# Widget Preview related
-.widget_preview/
-```
-
-## Flutter repository: pubspec.yaml
+## Flutter: pubspec.yaml
 
 ```yaml
 name: student_management_flutter
@@ -398,56 +234,83 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
 ```
 
-## Flutter repository: analysis_options.yaml
+## Flutter: .gitignore
 
-```yaml
-# This file configures the analyzer, which statically analyzes Dart code to
-# check for errors, warnings, and lints.
-#
-# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
-# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
-# invoked from the command line by running `flutter analyze`.
+```
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
 
-# The following line activates a set of recommended lints for Flutter apps,
-# packages, and plugins designed to encourage good coding practices.
-include: package:flutter_lints/flutter.yaml
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
 
-analyzer:
-  exclude:
-    - build/**
-    - web/**
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
 
-linter:
-  # The lint rules applied to this project can be customized in the
-  # section below to disable rules from the `package:flutter_lints/flutter.yaml`
-  # included above or to enable additional rules. A list of all available lints
-  # and their documentation is published at https://dart.dev/lints.
-  #
-  # Instead of disabling a lint rule for the entire project in the
-  # section below, it can also be suppressed for a single line of code
-  # or a specific dart file by using the `// ignore: name_of_lint` and
-  # `// ignore_for_file: name_of_lint` syntax on the line or in the file
-  # producing the lint.
-  rules:
-    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
-    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+# Flutter/Dart/Pub related
+/config/app.json
+/.logs/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
 
-# Additional information about this file can be found at
-# https://dart.dev/guides/language/analysis-options
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Widget Preview related
+.widget_preview/
+
 ```
 
-## Flutter repository: config/app.example.json
+## Flutter: .gitattributes
+
+```
+* text=auto eol=lf
+
+```
+
+## Flutter: config/app.example.json
 
 ```json
 {
   "SUPABASE_URL": "https://YOUR_PROJECT_REFERENCE.supabase.co",
   "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_YOUR_PUBLIC_KEY"
 }
+
 ```
 
-## Flutter repository: lib/main.dart
+## Flutter: lib/main.dart
 
 ```dart
 import 'package:flutter/material.dart';
@@ -485,7 +348,9 @@ Future<void> main() async {
       url: url,
       publishableKey: key,
       authOptions: const FlutterAuthClientOptions(
-        authFlowType: AuthFlowType.pkce,
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUri: false,
       ),
     );
     runApp(
@@ -510,9 +375,10 @@ Future<void> main() async {
     );
   }
 }
+
 ```
 
-## Flutter repository: lib/student.dart
+## Flutter: lib/student.dart
 
 ```dart
 class Student {
@@ -587,9 +453,10 @@ class StudentPage {
   final List<Student> students;
   final bool hasMore;
 }
+
 ```
 
-## Flutter repository: lib/repository.dart
+## Flutter: lib/repository.dart
 
 ```dart
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -597,11 +464,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'student.dart';
 
 abstract class StudentRepository {
-  String? get accountEmail;
-  Stream<void> get authChanges;
-  Future<void> signIn(String email, String password);
-  Future<void> signOut();
-  Future<bool> hasAccess();
   Future<StudentPage> fetch({String search = '', int page = 0});
   Future<void> save(StudentDraft draft, {Student? original});
   Future<void> delete(Student student);
@@ -612,29 +474,7 @@ class SupabaseStudentRepository implements StudentRepository {
   final SupabaseClient client;
   static const pageSize = 20;
   @override
-  String? get accountEmail => client.auth.currentUser?.email;
-  @override
-  Stream<void> get authChanges => client.auth.onAuthStateChange.map((_) {});
-  @override
-  Future<void> signIn(String email, String password) async {
-    await client.auth.signInWithPassword(
-      email: email.trim(),
-      password: password,
-    );
-  }
-
-  @override
-  Future<void> signOut() => client.auth.signOut(scope: SignOutScope.local);
-  @override
-  Future<bool> hasAccess() async =>
-      await client.rpc('student_app_has_access') == true;
-  @override
   Future<StudentPage> fetch({String search = '', int page = 0}) async {
-    if (!await hasAccess()) {
-      throw const AppFailure(
-        'Your account is not approved. Ask the project owner for access.',
-      );
-    }
     final data = await client.rpc(
       'student_app_search',
       params: {
@@ -696,18 +536,6 @@ class AppFailure implements Exception {
 
 String friendlyError(Object error) {
   if (error is AppFailure) return error.message;
-  if (error is AuthException) {
-    if (error.code == 'invalid_credentials') {
-      return 'The email or password is incorrect.';
-    }
-    if (error.code == 'email_not_confirmed') {
-      return 'Your email is not confirmed. Ask the project owner to check your account.';
-    }
-    if (error.statusCode == '429') {
-      return 'Too many attempts. Wait a moment before trying again.';
-    }
-    return 'Sign-in failed. Check your connection and account details.';
-  }
   if (error is PostgrestException) {
     if (error.code == '23505') {
       return error.message.contains('student_number')
@@ -715,7 +543,7 @@ String friendlyError(Object error) {
           : 'That email address is already in use.';
     }
     if (error.code == '42501') {
-      return 'You do not have permission to change student records.';
+      return 'Demo database access is not enabled. Ask the project owner to check the classroom access rules.';
     }
     if (error.code == '23514' || error.code == '23502') {
       return 'Check all required fields. Year level must be from 1 to 6.';
@@ -724,14 +552,15 @@ String friendlyError(Object error) {
       return 'The database setup is incomplete. Ask the project owner to run the Flutter database migration.';
     }
     if (error.code == 'PGRST301' || error.code == 'PGRST303') {
-      return 'Your session expired. Sign out and sign in again.';
+      return 'Check the Supabase project URL and publishable key, then rebuild the app.';
     }
   }
   return 'We could not connect. Check your internet connection and try again.';
 }
+
 ```
 
-## Flutter repository: lib/app.dart
+## Flutter: lib/app.dart
 
 ```dart
 import 'dart:async';
@@ -774,15 +603,7 @@ class StudentApp extends StatelessWidget {
       ),
     ),
     builder: (context, child) => MobileFrame(child: child!),
-    home: StreamBuilder<void>(
-      stream: repository.authChanges,
-      builder: (context, _) => repository.accountEmail == null
-          ? LoginScreen(repository: repository)
-          : AccessGate(
-              key: ValueKey(repository.accountEmail),
-              repository: repository,
-            ),
-    ),
+    home: StudentHome(repository: repository),
   );
 }
 
@@ -819,217 +640,6 @@ class MobileFrame extends StatelessWidget {
                 borderRadius: BorderRadius.circular(framed ? 28 : 0),
                 child: child,
               ),
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
-
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, required this.repository});
-  final StudentRepository repository;
-  @override
-  State<LoginScreen> createState() => _LoginScreenState();
-}
-
-class _LoginScreenState extends State<LoginScreen> {
-  final _form = GlobalKey<FormState>();
-  final _email = TextEditingController(), _password = TextEditingController();
-  bool _busy = false, _hide = true;
-  String? _error;
-  @override
-  void dispose() {
-    _email.dispose();
-    _password.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (_busy || !_form.currentState!.validate()) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await widget.repository.signIn(_email.text, _password.text);
-    } catch (e) {
-      if (mounted) setState(() => _error = friendlyError(e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(28),
-          child: Form(
-            key: _form,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: CircleAvatar(
-                    radius: 30,
-                    backgroundColor: Color(0xFFE3EAFF),
-                    child: Icon(Icons.school_rounded, size: 30, color: accent),
-                  ),
-                ),
-                const SizedBox(height: 28),
-                const Text(
-                  'STUDENT POCKET',
-                  style: TextStyle(
-                    color: accent,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Your directory.\nA little closer.',
-                  style: TextStyle(
-                    fontSize: 34,
-                    height: 1.15,
-                    fontWeight: FontWeight.w800,
-                    color: ink,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Sign in to manage the same student records used by your Laravel website.',
-                  style: TextStyle(color: Color(0xFF68768D), height: 1.6),
-                ),
-                const SizedBox(height: 32),
-                TextFormField(
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  autofillHints: const [AutofillHints.username],
-                  decoration: const InputDecoration(
-                    labelText: 'Email address',
-                    prefixIcon: Icon(Icons.alternate_email),
-                  ),
-                  validator: StudentDraft.emailError,
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _password,
-                  obscureText: _hide,
-                  autofillHints: const [AutofillHints.password],
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      tooltip: _hide ? 'Show password' : 'Hide password',
-                      onPressed: () => setState(() => _hide = !_hide),
-                      icon: Icon(
-                        _hide
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
-                      ),
-                    ),
-                  ),
-                  validator: (v) =>
-                      (v ?? '').isEmpty ? 'Enter your password.' : null,
-                  onFieldSubmitted: (_) => _submit(),
-                ),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: ErrorNotice(_error!),
-                  ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: _busy ? null : _submit,
-                  child: Text(_busy ? 'Signing in…' : 'Sign in'),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Accounts are provided by your project owner.\nNeed access or a password reset? Ask your teacher.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF68768D),
-                    height: 1.6,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-class AccessGate extends StatefulWidget {
-  const AccessGate({super.key, required this.repository});
-  final StudentRepository repository;
-  @override
-  State<AccessGate> createState() => _AccessGateState();
-}
-
-class _AccessGateState extends State<AccessGate> {
-  late Future<bool> _access;
-  @override
-  void initState() {
-    super.initState();
-    _access = widget.repository.hasAccess();
-  }
-
-  @override
-  Widget build(BuildContext context) => FutureBuilder<bool>(
-    future: _access,
-    builder: (context, result) {
-      if (result.connectionState != ConnectionState.done) {
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
-      }
-      if (result.data == true) {
-        return StudentHome(repository: widget.repository);
-      }
-      return Scaffold(
-        appBar: AppBar(title: const Text('Account access')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.admin_panel_settings_outlined,
-                  size: 52,
-                  color: accent,
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  result.hasError ? friendlyError(result.error!) : 'Your account has not been approved for the student directory. Ask your project owner to enable access.',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: () =>
-                      setState(() => _access = widget.repository.hasAccess()),
-                  child: const Text('Check again'),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    try {
-                      await widget.repository.signOut();
-                    } catch (e) {
-                      if (context.mounted) {
-                        showMessage(context, friendlyError(e));
-                      }
-                    }
-                  },
-                  child: const Text('Sign out'),
-                ),
-              ],
             ),
           ),
         ),
@@ -1124,47 +734,6 @@ class _StudentHomeState extends State<StudentHome> {
           tooltip: 'Refresh students',
           onPressed: _loading ? null : _load,
           icon: const Icon(Icons.refresh_rounded),
-        ),
-        IconButton(
-          tooltip: 'Account',
-          icon: const Icon(Icons.account_circle_outlined),
-          onPressed: () => showModalBottomSheet<void>(
-            context: context,
-            builder: (sheet) => SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Signed in',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(widget.repository.accountEmail ?? ''),
-                    const SizedBox(height: 20),
-                    FilledButton.tonal(
-                      onPressed: () async {
-                        Navigator.pop(sheet);
-                        try {
-                          await widget.repository.signOut();
-                        } catch (e) {
-                          if (context.mounted) {
-                            showMessage(context, friendlyError(e));
-                          }
-                        }
-                      },
-                      child: const Text('Sign out'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
         ),
       ],
     ),
@@ -1696,9 +1265,10 @@ class ErrorNotice extends StatelessWidget {
 void showMessage(BuildContext context, String message) =>
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+
 ```
 
-## Flutter repository: scripts/setup.sh
+## Flutter: scripts/setup.sh
 
 ```bash
 #!/usr/bin/env bash
@@ -1710,9 +1280,10 @@ if [ ! -f config/app.json ]; then
     cp config/app.example.json config/app.json
 fi
 bash scripts/start.sh
+
 ```
 
-## Flutter repository: scripts/start.sh
+## Flutter: scripts/start.sh
 
 ```bash
 #!/usr/bin/env bash
@@ -1735,9 +1306,10 @@ for attempt in {1..30}; do
 done
 tail -20 .logs/server.log
 exit 1
+
 ```
 
-## Flutter repository: scripts/rebuild.sh
+## Flutter: scripts/rebuild.sh
 
 ```bash
 #!/usr/bin/env bash
@@ -1748,9 +1320,10 @@ flutter analyze
 flutter test
 flutter build web --dart-define-from-file=config/app.json
 echo 'Build complete. Refresh the browser. If port 8080 is stopped, run bash scripts/start.sh.'
+
 ```
 
-## Flutter repository: test/student_test.dart
+## Flutter: test/student_test.dart
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -1808,13 +1381,12 @@ void main() {
     expect(student.updatedAt, isNotNull);
   });
 }
+
 ```
 
-## Flutter repository: test/app_test.dart
+## Flutter: test/app_test.dart
 
 ```dart
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:student_management_flutter/app.dart';
@@ -1822,40 +1394,23 @@ import 'package:student_management_flutter/repository.dart';
 import 'package:student_management_flutter/student.dart';
 
 class MemoryRepository implements StudentRepository {
-  final changes = StreamController<void>.broadcast();
-  String? email;
-  bool approved = true;
+  bool fail = false;
   final records = <Student>[];
   @override
-  String? get accountEmail => email;
-  @override
-  Stream<void> get authChanges => changes.stream;
-  @override
-  Future<void> signIn(String email, String password) async {
-    this.email = email;
-    changes.add(null);
+  Future<StudentPage> fetch({String search = '', int page = 0}) async {
+    if (fail) throw const AppFailure('Connection unavailable.');
+    return StudentPage(
+      records
+          .where(
+            (s) => '${s.name} ${s.number} ${s.course}'.toLowerCase().contains(
+              search.toLowerCase(),
+            ),
+          )
+          .toList(),
+      false,
+    );
   }
 
-  @override
-  Future<void> signOut() async {
-    email = null;
-    changes.add(null);
-  }
-
-  @override
-  Future<bool> hasAccess() async => approved;
-  @override
-  Future<StudentPage> fetch({String search = '', int page = 0}) async =>
-      StudentPage(
-        records
-            .where(
-              (s) => '${s.name} ${s.number} ${s.course}'.toLowerCase().contains(
-                search.toLowerCase(),
-              ),
-            )
-            .toList(),
-        false,
-      );
   @override
   Future<void> save(StudentDraft draft, {Student? original}) async {
     if (records.any((s) => s.number == draft.number && s.id != original?.id)) {
@@ -1881,39 +1436,23 @@ class MemoryRepository implements StudentRepository {
 }
 
 void main() {
-  testWidgets('login rejects empty input and enters approved directory', (
-    tester,
-  ) async {
+  testWidgets('opens directory directly with no login', (tester) async {
     final repo = MemoryRepository();
-    addTearDown(repo.changes.close);
     await tester.pumpWidget(StudentApp(repository: repo));
-    await tester.ensureVisible(find.text('Sign in'));
-    await tester.tap(find.text('Sign in'));
-    await tester.pumpAndSettle();
-    expect(find.text('Enter an email address.'), findsOneWidget);
-    expect(find.text('Enter your password.'), findsOneWidget);
-    await tester.enterText(
-      find.byType(TextFormField).at(0),
-      'teacher@example.test',
-    );
-    await tester.enterText(
-      find.byType(TextFormField).at(1),
-      'classroom-password',
-    );
-    await tester.ensureVisible(find.text('Sign in'));
-    await tester.tap(find.text('Sign in'));
     await tester.pumpAndSettle();
     expect(find.text('Your directory starts here'), findsOneWidget);
+    expect(find.text('Sign in'), findsNothing);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
   });
-  testWidgets('unapproved accounts cannot enter the directory', (tester) async {
-    final repo = MemoryRepository()
-      ..email = 'pending@example.test'
-      ..approved = false;
-    addTearDown(repo.changes.close);
+  testWidgets('connection errors can be retried', (tester) async {
+    final repo = MemoryRepository()..fail = true;
     await tester.pumpWidget(StudentApp(repository: repo));
     await tester.pumpAndSettle();
-    expect(find.textContaining('has not been approved'), findsOneWidget);
-    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('Connection unavailable.'), findsOneWidget);
+    repo.fail = false;
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your directory starts here'), findsOneWidget);
   });
   testWidgets('student form creates, edits, searches, and confirms deletion', (
     tester,
@@ -1922,8 +1461,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final repo = MemoryRepository()..email = 'teacher@example.test';
-    addTearDown(repo.changes.close);
+    final repo = MemoryRepository();
     await tester.pumpWidget(StudentApp(repository: repo));
     await tester.pumpAndSettle();
     await tester.tap(find.byType(FloatingActionButton));
@@ -1988,17 +1526,17 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final repo = MemoryRepository();
-    addTearDown(repo.changes.close);
     await tester.pumpWidget(StudentApp(repository: repo));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.ensureVisible(find.text('Sign in'));
-    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('Sign in'), findsNothing);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
   });
 }
+
 ```
 
-## Flutter repository: .github/workflows/flutter.yml
+## Flutter: .github/workflows/flutter.yml
 
 ```yaml
 name: Flutter checks
@@ -2017,4 +1555,6 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build web --dart-define-from-file=config/app.example.json
+
 ```
+

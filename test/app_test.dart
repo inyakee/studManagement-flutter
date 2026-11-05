@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:student_management_flutter/app.dart';
@@ -7,40 +5,23 @@ import 'package:student_management_flutter/repository.dart';
 import 'package:student_management_flutter/student.dart';
 
 class MemoryRepository implements StudentRepository {
-  final changes = StreamController<void>.broadcast();
-  String? email;
-  bool approved = true;
+  bool fail = false;
   final records = <Student>[];
   @override
-  String? get accountEmail => email;
-  @override
-  Stream<void> get authChanges => changes.stream;
-  @override
-  Future<void> signIn(String email, String password) async {
-    this.email = email;
-    changes.add(null);
+  Future<StudentPage> fetch({String search = '', int page = 0}) async {
+    if (fail) throw const AppFailure('Connection unavailable.');
+    return StudentPage(
+      records
+          .where(
+            (s) => '${s.name} ${s.number} ${s.course}'.toLowerCase().contains(
+              search.toLowerCase(),
+            ),
+          )
+          .toList(),
+      false,
+    );
   }
 
-  @override
-  Future<void> signOut() async {
-    email = null;
-    changes.add(null);
-  }
-
-  @override
-  Future<bool> hasAccess() async => approved;
-  @override
-  Future<StudentPage> fetch({String search = '', int page = 0}) async =>
-      StudentPage(
-        records
-            .where(
-              (s) => '${s.name} ${s.number} ${s.course}'.toLowerCase().contains(
-                search.toLowerCase(),
-              ),
-            )
-            .toList(),
-        false,
-      );
   @override
   Future<void> save(StudentDraft draft, {Student? original}) async {
     if (records.any((s) => s.number == draft.number && s.id != original?.id)) {
@@ -66,39 +47,23 @@ class MemoryRepository implements StudentRepository {
 }
 
 void main() {
-  testWidgets('login rejects empty input and enters approved directory', (
-    tester,
-  ) async {
+  testWidgets('opens directory directly with no login', (tester) async {
     final repo = MemoryRepository();
-    addTearDown(repo.changes.close);
     await tester.pumpWidget(StudentApp(repository: repo));
-    await tester.ensureVisible(find.text('Sign in'));
-    await tester.tap(find.text('Sign in'));
-    await tester.pumpAndSettle();
-    expect(find.text('Enter an email address.'), findsOneWidget);
-    expect(find.text('Enter your password.'), findsOneWidget);
-    await tester.enterText(
-      find.byType(TextFormField).at(0),
-      'teacher@example.test',
-    );
-    await tester.enterText(
-      find.byType(TextFormField).at(1),
-      'classroom-password',
-    );
-    await tester.ensureVisible(find.text('Sign in'));
-    await tester.tap(find.text('Sign in'));
     await tester.pumpAndSettle();
     expect(find.text('Your directory starts here'), findsOneWidget);
+    expect(find.text('Sign in'), findsNothing);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
   });
-  testWidgets('unapproved accounts cannot enter the directory', (tester) async {
-    final repo = MemoryRepository()
-      ..email = 'pending@example.test'
-      ..approved = false;
-    addTearDown(repo.changes.close);
+  testWidgets('connection errors can be retried', (tester) async {
+    final repo = MemoryRepository()..fail = true;
     await tester.pumpWidget(StudentApp(repository: repo));
     await tester.pumpAndSettle();
-    expect(find.textContaining('has not been approved'), findsOneWidget);
-    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('Connection unavailable.'), findsOneWidget);
+    repo.fail = false;
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your directory starts here'), findsOneWidget);
   });
   testWidgets('student form creates, edits, searches, and confirms deletion', (
     tester,
@@ -107,8 +72,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final repo = MemoryRepository()..email = 'teacher@example.test';
-    addTearDown(repo.changes.close);
+    final repo = MemoryRepository();
     await tester.pumpWidget(StudentApp(repository: repo));
     await tester.pumpAndSettle();
     await tester.tap(find.byType(FloatingActionButton));
@@ -173,11 +137,10 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final repo = MemoryRepository();
-    addTearDown(repo.changes.close);
     await tester.pumpWidget(StudentApp(repository: repo));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.ensureVisible(find.text('Sign in'));
-    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('Sign in'), findsNothing);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
   });
 }
