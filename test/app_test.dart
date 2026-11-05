@@ -102,6 +102,10 @@ void main() {
   testWidgets('student form creates, edits, searches, and confirms deletion', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(460, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final repo = MemoryRepository()..email = 'teacher@example.test';
     addTearDown(repo.changes.close);
     await tester.pumpWidget(StudentApp(repository: repo));
@@ -118,6 +122,8 @@ void main() {
     for (var i = 0; i < values.length; i++) {
       await tester.enterText(find.byType(TextFormField).at(i), values[i]);
     }
+    await tester.drag(find.byType(ListView).last, const Offset(0, -300));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.byType(DropdownButtonFormField<int>));
     await tester.tap(find.byType(DropdownButtonFormField<int>));
     await tester.pumpAndSettle();
